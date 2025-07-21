@@ -28,11 +28,5 @@ impl RatchetKey {
         }
     }
 
-    pub fn from_public(public: [u8; 32]) -> Self {
-    Self {
-        private: [0u8; 32], // inutile ici, on ne fait pas de DH avec cette clé en tant que privée
-        public,
-    }
-}
-
+    
 }

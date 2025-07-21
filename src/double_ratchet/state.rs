@@ -48,12 +48,10 @@ impl RatchetState {
         receiver: String,
     ) -> EncryptedMessage {
         // 🔁 Forcer la rotation DH à chaque message
-        println!("🔁 [encrypt] 🔄 Nouvelle rotation DH (envoi)");
         self.dhr = *their_dh_public;
         self.dhs = RatchetKey::new(); // nouvelle paire locale
 
         let dh_output = diffie_hellman(&self.dhs.private, &self.dhr);
-        println!("[encrypt] DH output: {}", hex::encode(dh_output));
 
         let root_hkdf = Hkdf::<Sha256>::new(Some(&self.root_key.bytes), &dh_output);
 
@@ -68,16 +66,15 @@ impl RatchetState {
             index: 0,
         };
 
-        println!("🔐 [encrypt] Nouvelle root_key: {}", hex::encode(rk));
         println!(
             "🔗 [encrypt] Nouvelle sending_chain: {}",
             hex::encode(ck_send)
         );
-        println!("🔑 [encrypt] Nouveau DHs: {}", hex::encode(self.dhs.public));
 
         let (next_ck, message_key) = self.sending_chain.derive_next();
         let index = self.sending_chain.index;
         self.sending_chain = next_ck;
+        println!("🔐 Alice message_key: {}", hex::encode(&message_key.key));
 
         let (ciphertext, nonce) = encrypt_chacha20(&message_key.key, plaintext.as_bytes());
 
@@ -96,10 +93,7 @@ impl RatchetState {
         msg: &EncryptedMessage,
         their_dh_public: &[u8; 32],
     ) -> Option<String> {
-        println!("🔓 [decrypt] Tentative déchiffrement");
-
         if self.dhr != *their_dh_public {
-            println!("🔁 [decrypt] 🔄 Rotation DH car DHR ≠ DH_pub expéditeur");
             self.dhr = *their_dh_public;
 
             let dh_output = diffie_hellman(&self.dhs.private, &msg.ratchet_pub);
@@ -110,28 +104,24 @@ impl RatchetState {
             let mut rk = [0u8; 32];
             let mut ck_recv = [0u8; 32];
             root_hkdf.expand(b"double-ratchet-rk", &mut rk).unwrap();
-            root_hkdf
-                .expand(b"double-ratchet-ck", &mut ck_recv)
-                .unwrap();
+            root_hkdf.expand(b"ratchet-ck-send", &mut ck_recv).unwrap();
 
             self.root_key = RootKey { bytes: rk };
-            let (next_ck, message_key) = self.receiving_chain.derive_next();
-            self.receiving_chain = next_ck;
             self.receiving_chain = ChainKey {
                 key: ck_recv,
-                index: 0,
+                index: msg.message_index,
             };
+            let (next_ck, message_key) = self.receiving_chain.derive_next();
+            self.receiving_chain = next_ck;
 
-            println!("🔐 [decrypt] Nouvelle root_key: {}", hex::encode(rk));
             println!(
                 "🔗 [decrypt] Nouvelle receiving_chain: {}",
                 hex::encode(ck_recv)
             );
-
+            println!("🔐 Bob message_key: {}", hex::encode(&message_key.key));
             match decrypt_chacha20(&message_key.key, &msg.nonce, &msg.ciphertext) {
                 Ok(plaintext_bytes) => {
                     let text = String::from_utf8(plaintext_bytes).ok();
-                    println!("📥 Message déchiffré: {:?}", text);
                     return text;
                 }
                 Err(_) => {

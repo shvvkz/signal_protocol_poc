@@ -46,35 +46,29 @@ fn main() {
     let mut ratchet_alice = RatchetState::new(root_key_alice, alice_ratchet_key.clone(), bob_ratchet_key.public, true);
     let mut ratchet_bob = RatchetState::new(root_key_bob, bob_ratchet_key, alice_ratchet_key.public, false);
 
-    println!("Alice: {}", ratchet_alice);
-    println!("Bob: {}", ratchet_bob);
-
     println!("🔄 Double Ratchet initialisé.\n");
 
     // 💬 1er message : Alice → Bob
     let bob_pub = ratchet_bob.dhs.public;
     let msg1 = ratchet_alice.encrypt("Salut Bob, c’est Alice !", &bob_pub, "Alice".into(), "Bob".into());
-    println!("Alice: {}", ratchet_alice);
-    println!("Bob: {}", ratchet_bob);
     println!("📤 Alice envoie");
     let clear1 = ratchet_bob.decrypt(&msg1, &msg1.ratchet_pub);
-    println!("Alice: {}", ratchet_alice);
-    println!("Bob: {}", ratchet_bob);
     println!("📥 Bob reçoit : {:?}", clear1);
 
     // 💬 2e message : Bob → Alice
     let alice_pub = ratchet_alice.dhs.public;
     let msg2 = ratchet_bob.encrypt("Salut Alice, bien reçu !", &alice_pub, "Bob".into(), "Alice".into());
     let clear2 = ratchet_alice.decrypt(&msg2, &msg2.ratchet_pub);
-    println!("Alice: {}", ratchet_alice);
-    println!("Bob: {}", ratchet_bob);
     println!("📥 Alice reçoit : {:?}", clear2);
+
+    let alice_pub_2 = ratchet_alice.dhs.public;
+    let msg3 = ratchet_bob.encrypt("On va pouvoir enfin discuter !", &alice_pub_2, "Bob".into(), "Alice".into());
+    let clear3 = ratchet_alice.decrypt(&msg3, &msg3.ratchet_pub);
+    println!("📥 Alice reçoit : {:?}", clear3);
 
     // 💬 3e message : Alice → Bob (nouvelle rotation DH)
     let bob_pub_2 = ratchet_bob.dhs.public;
-    let msg3 = ratchet_alice.encrypt("On peut maintenant discuter en toute sécurité 🔐", &bob_pub_2, "Alice".into(), "Bob".into());
-    let clear3 = ratchet_bob.decrypt(&msg3, &msg3.ratchet_pub);
-    println!("Alice: {}", ratchet_alice);
-    println!("Bob: {}", ratchet_bob);
-    println!("📥 Bob reçoit : {:?}", clear3);
+    let msg4 = ratchet_alice.encrypt("On peut maintenant discuter en toute sécurité 🔐", &bob_pub_2, "Alice".into(), "Bob".into());
+    let clear4 = ratchet_bob.decrypt(&msg4, &msg4.ratchet_pub);
+    println!("📥 Bob reçoit : {:?}", clear4);
 }
