@@ -46,41 +46,32 @@ fn main() {
     let mut alice = RatchetState::new(
         root_key_alice,
         ratchet_key_alice.clone(),
-        ratchet_key_bob.public.clone(),
+        Some(ratchet_key_bob.public.clone()),
         true,
     );
     let mut bob = RatchetState::new(
         root_key_bob,
         ratchet_key_bob,
-        ratchet_key_alice.public,
+        None,
         false,
     );
-
     let msg0 = alice.encrypt(
         "Bonjour Bob !",
-        &bob.dhs.public,
         "Alice".into(),
         "Bob".into(),
     );
-    let decrypted_msg0 = bob.decrypt(&msg0, &alice.dhs.public);
+    let decrypted_msg0 = bob.decrypt(&msg0);
     println!("Message 0 déchiffré : {:?}", decrypted_msg0);
 
-    let msg1 = alice.encrypt(
-        "Comment vas-tu ?",
-        &bob.dhs.public,
-        "Alice".into(),
-        "Bob".into(),
-    );
-
-    let decrypted_msg1 = bob.decrypt(&msg1, &alice.dhs.public);
-    println!("Message 1 déchiffré : {:?}", decrypted_msg1);
-    let msg2 = alice.encrypt(
+    let msg2 = bob.encrypt(
         "Tu as reçu mes messages ?",
-        &bob.dhs.public,
         "Alice".into(),
         "Bob".into(),
     );
-
-    let decrypted_msg2 = bob.decrypt(&msg2, &alice.dhs.public);
+    let decrypted_msg2 = alice.decrypt(&msg2);
     println!("Message 2 déchiffré : {:?}", decrypted_msg2);
+    let msg3 = bob.encrypt("Je l'espere en tout cas", "Bob".into(), "Alice".into());
+    let decrypted_msg3 = alice.decrypt(&msg3);
+    println!("Message 3 déchiffré : {:?}", decrypted_msg3);
+
 }

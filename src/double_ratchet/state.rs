@@ -9,8 +9,8 @@ use crate::{
         encryption::{decrypt_chacha20, encrypt_chacha20},
     },
     keys::{
-        chain_key::ChainKey, encrypted_message::EncryptedMessage,
-        ratchet_key::RatchetKey, root_key::RootKey,
+        chain_key::ChainKey, encrypted_message::EncryptedMessage, ratchet_key::RatchetKey,
+        root_key::RootKey,
     },
 };
 
@@ -20,11 +20,17 @@ pub struct RatchetState {
     pub sending_chain: ChainKey,
     pub receiving_chain: ChainKey,
     pub dhs: RatchetKey,
-    pub dhr: [u8; 32],
+    pub dhr: Option<[u8; 32]>,
+    pub last_dhs_private_used: Option<[u8; 32]>,
 }
 
 impl RatchetState {
-    pub fn new(root_key: RootKey, dhs: RatchetKey, dhr: [u8; 32], is_initiator: bool) -> Self {
+    pub fn new(
+        root_key: RootKey,
+        dhs: RatchetKey,
+        dhr: Option<[u8; 32]>,
+        is_initiator: bool,
+    ) -> Self {
         let (sending_chain, receiving_chain) = if is_initiator {
             crate::crypto_utils::hkdf::derive_initial_chain_keys(&root_key)
         } else {
@@ -37,21 +43,17 @@ impl RatchetState {
             receiving_chain,
             dhs,
             dhr,
+            last_dhs_private_used: None,
         }
     }
 
     pub fn encrypt(
         &mut self,
         plaintext: &str,
-        their_dh_public: &[u8; 32],
         sender: String,
         receiver: String,
     ) -> EncryptedMessage {
-        // 🔁 Forcer la rotation DH à chaque message
-        self.dhr = *their_dh_public;
-        self.dhs = RatchetKey::new(); // nouvelle paire locale
-
-        let dh_output = diffie_hellman(&self.dhs.private, &self.dhr);
+        let dh_output = diffie_hellman(&self.dhs.private, self.dhr.as_ref().unwrap());
 
         let root_hkdf = Hkdf::<Sha256>::new(Some(&self.root_key.bytes), &dh_output);
 
@@ -82,15 +84,17 @@ impl RatchetState {
         }
     }
 
-    pub fn decrypt(
-        &mut self,
-        msg: &EncryptedMessage,
-        their_dh_public: &[u8; 32],
-    ) -> Option<String> {
-        if self.dhr != *their_dh_public {
-            self.dhr = *their_dh_public;
+    pub fn decrypt(&mut self, msg: &EncryptedMessage) -> Option<String> {
+        let is_new_dhr = self.dhr.map_or(true, |prev| prev != msg.ratchet_pub);
 
-            let dh_output = diffie_hellman(&self.dhs.private, &msg.ratchet_pub);
+        if is_new_dhr {
+            // 🔄 On va effectuer un DH ratchet réception
+            self.dhr = Some(msg.ratchet_pub);
+
+            // 🔐 On utilise l’ancienne clé privée si elle existe
+            let dh_private = self.last_dhs_private_used.unwrap_or(self.dhs.private);
+
+            let dh_output = diffie_hellman(&dh_private, &msg.ratchet_pub);
 
             let root_hkdf = Hkdf::<Sha256>::new(Some(&self.root_key.bytes), &dh_output);
 
@@ -104,37 +108,37 @@ impl RatchetState {
                 key: ck_recv,
                 index: msg.message_index,
             };
+
+            // 🧠 On prépare le prochain DH ratchet envoi
+            self.last_dhs_private_used = Some(dh_private); // On garde celle qu’on vient d’utiliser
+            self.dhs = RatchetKey::new(); // Nouvelle paire locale
+
             let (next_ck, message_key) = self.receiving_chain.derive_next();
             self.receiving_chain = next_ck;
 
             match decrypt_chacha20(&message_key.key, &msg.nonce, &msg.ciphertext) {
-                Ok(plaintext_bytes) => {
-                    let text = String::from_utf8(plaintext_bytes).ok();
-                    return text;
-                }
+                Ok(plaintext_bytes) => String::from_utf8(plaintext_bytes).ok(),
                 Err(_) => {
-                    println!("❌ Échec de déchiffrement après rotation DH");
-                    return None;
+                    println!("❌ Échec de déchiffrement après ratchet");
+                    None
                 }
             }
-        }
-
-        while self.receiving_chain.index < msg.message_index {
-            let (next_ck, _) = self.receiving_chain.derive_next();
-            self.receiving_chain = next_ck;
-        }
-
-        let (next_ck, message_key) = self.receiving_chain.derive_next();
-        self.receiving_chain = next_ck;
-
-        match decrypt_chacha20(&message_key.key, &msg.nonce, &msg.ciphertext) {
-            Ok(plaintext_bytes) => {
-                let text = String::from_utf8(plaintext_bytes).ok();
-                text
+        } else {
+            // 📦 Message avec même ratchet_pub, juste avance dans la chaîne symétrique
+            while self.receiving_chain.index < msg.message_index {
+                let (next_ck, _) = self.receiving_chain.derive_next();
+                self.receiving_chain = next_ck;
             }
-            Err(_) => {
-                println!("❌ Échec de déchiffrement");
-                None
+
+            let (next_ck, message_key) = self.receiving_chain.derive_next();
+            self.receiving_chain = next_ck;
+
+            match decrypt_chacha20(&message_key.key, &msg.nonce, &msg.ciphertext) {
+                Ok(plaintext_bytes) => String::from_utf8(plaintext_bytes).ok(),
+                Err(_) => {
+                    println!("❌ Échec de déchiffrement (pas de ratchet)");
+                    None
+                }
             }
         }
     }
@@ -150,7 +154,10 @@ impl Display for RatchetState {
             self.receiving_chain,
             hex::encode(self.dhs.public),
             hex::encode(self.dhs.private),
-            hex::encode(self.dhr)
+            match &self.dhr {
+                Some(dhr_bytes) => hex::encode(dhr_bytes),
+                None => String::from("None"),
+            }
         )
     }
 }
