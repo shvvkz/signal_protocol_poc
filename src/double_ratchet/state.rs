@@ -90,6 +90,8 @@ impl RatchetState {
         if is_new_dhr {
             // 🔄 On va effectuer un DH ratchet réception
             self.dhr = Some(msg.ratchet_pub);
+            self.last_dhs_private_used = Some(self.dhs.private); // On garde celle qu’on vient d’utiliser
+            self.dhs = RatchetKey::new(); // Nouvelle paire locale
 
             // 🔐 On utilise l’ancienne clé privée si elle existe
             let dh_private = self.last_dhs_private_used.unwrap_or(self.dhs.private);
@@ -110,8 +112,6 @@ impl RatchetState {
             };
 
             // 🧠 On prépare le prochain DH ratchet envoi
-            self.last_dhs_private_used = Some(dh_private); // On garde celle qu’on vient d’utiliser
-            self.dhs = RatchetKey::new(); // Nouvelle paire locale
 
             let (next_ck, message_key) = self.receiving_chain.derive_next();
             self.receiving_chain = next_ck;
@@ -125,6 +125,22 @@ impl RatchetState {
             }
         } else {
             // 📦 Message avec même ratchet_pub, juste avance dans la chaîne symétrique
+            let dh_private = self.last_dhs_private_used.unwrap_or(self.dhs.private);
+
+            let dh_output = diffie_hellman(&dh_private, &msg.ratchet_pub);
+
+            let root_hkdf = Hkdf::<Sha256>::new(Some(&self.root_key.bytes), &dh_output);
+
+            let mut rk = [0u8; 32];
+            let mut ck_recv = [0u8; 32];
+            root_hkdf.expand(b"double-ratchet-rk", &mut rk).unwrap();
+            root_hkdf.expand(b"ratchet-ck-send", &mut ck_recv).unwrap();
+
+            self.root_key = RootKey { bytes: rk };
+            self.receiving_chain = ChainKey {
+                key: ck_recv,
+                index: msg.message_index,
+            };
             while self.receiving_chain.index < msg.message_index {
                 let (next_ck, _) = self.receiving_chain.derive_next();
                 self.receiving_chain = next_ck;
@@ -148,7 +164,7 @@ impl Display for RatchetState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "root_key: {}\nsending_chain: {:?}\nreceiving_chain: {:?}\ndhs.pub: {}\ndhs.priv: {}\ndhr: {}",
+            "root_key: {}\nsending_chain: {:?}\nreceiving_chain: {:?}\ndhs.pub: {}\ndhs.priv: {}\ndhr: {}\nlast_dhs_private_used: {}",
             self.root_key,
             self.sending_chain,
             self.receiving_chain,
@@ -156,6 +172,10 @@ impl Display for RatchetState {
             hex::encode(self.dhs.private),
             match &self.dhr {
                 Some(dhr_bytes) => hex::encode(dhr_bytes),
+                None => String::from("None"),
+            },
+            match &self.last_dhs_private_used {
+                Some(last_dhs_bytes) => hex::encode(last_dhs_bytes),
                 None => String::from("None"),
             }
         )
