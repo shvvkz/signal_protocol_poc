@@ -1,25 +1,23 @@
 use std::fmt::Display;
 
-use serde::{Serialize, Deserialize};
-use x25519_dalek::{StaticSecret, PublicKey as X25519PublicKey};
 use ed25519_dalek::SigningKey;
 use rand_core::{OsRng, RngCore};
+use serde::{Deserialize, Serialize};
+use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdentityKey {
-    pub dh_private: [u8; 32],     // X25519
+    dh_private: [u8; 32], // X25519
     pub dh_public: [u8; 32],
-    pub sign_private: [u8; 32],   // Ed25519
-    pub sign_public: [u8; 32],
+    sign_private: [u8; 32], // Ed25519
+    sign_public: [u8; 32],
 }
 
 impl IdentityKey {
     pub fn new() -> Self {
-        // X25519 (Diffie-Hellman)
         let dh_private = StaticSecret::random_from_rng(&mut OsRng);
         let dh_public = X25519PublicKey::from(&dh_private);
 
-        // Ed25519 (Signature)
         let mut signing_bytes = [0u8; 32];
         OsRng.fill_bytes(&mut signing_bytes);
         let sign_private = SigningKey::from_bytes(&signing_bytes);
@@ -33,8 +31,8 @@ impl IdentityKey {
         }
     }
 
-    pub fn public_key(&self) -> [u8; 32] {
-        self.dh_public
+    pub(crate) fn private(&self) -> [u8; 32] {
+        self.dh_private
     }
 
     pub fn signing_key(&self) -> SigningKey {

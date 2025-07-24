@@ -6,7 +6,7 @@ use x25519_dalek::{StaticSecret, PublicKey as X25519PublicKey};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EphemeralKey {
-    pub private: [u8; 32],
+    private: [u8; 32],
     pub public: [u8; 32],
 }
 
@@ -19,6 +19,10 @@ impl EphemeralKey {
             private: private_key.to_bytes(),
             public: *public_key.as_bytes(),
         }
+    }
+
+    pub(crate) fn private(&self) -> [u8; 32] {
+        self.private
     }
 }
 

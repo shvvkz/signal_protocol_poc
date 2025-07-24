@@ -49,8 +49,8 @@ impl User {
         UserPublicInfo {
             id: self.id.clone(),
             name: self.name.clone(),
-            ik: self.ik.public_key(),
-            spk: self.spk.public_key(),
+            ik: self.ik.dh_public,
+            spk: self.spk.public,
         }
     }
 
@@ -81,7 +81,7 @@ impl User {
             let rk = derive_root_key(&session.bytes);
             let dhs = RatchetKey::new();
 
-            RatchetState::new(rk, dhs, Some(to.spk.public_key()), true)
+            RatchetState::new(rk, dhs, Some(to.spk.public), true)
         });
         ratchet.encrypt(
             plaintext,
@@ -111,10 +111,11 @@ impl User {
                 ek,
             );
             let rk = derive_root_key(&session.bytes);
-            let dhs = RatchetKey {
-                private: self.spk.private,
-                public: self.spk.public_key(),
-            };
+            // Accessing the private field directly is not possible if it's private.
+            // You need to provide a public method in SignedPreKey to get the private key if needed.
+            // For example, add this to SignedPreKey:
+            // pub fn private_key(&self) -> [u8; 32] { self.private }
+            let dhs = RatchetKey::from_keys(self.spk.private(), self.spk.public);
             RatchetState::new(rk, dhs, None, false)
         });
 
@@ -126,8 +127,16 @@ impl Display for User {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "id: {}\nname: {},\nik: {},\nspk: {},\nopk_count: {}\nsessions: {:?}\n",
-            self.id, self.name, self.ik, self.spk, self.opk, self.sessions
+            "id: {}\nname: {}\nik: {}\nspk: {}\nopk_count: {}\nsessions:\n{}\n",
+            self.id,
+            self.name,
+            self.ik,
+            self.spk,
+            self.opk.len(),
+            self.sessions.iter()
+                .map(|(k, v)| format!("{}: {}", k, v))
+                .collect::<Vec<_>>()
+                .join("\n")
         )
     }
 }

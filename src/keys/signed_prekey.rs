@@ -3,12 +3,12 @@ use std::fmt::Display;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use rand_core::OsRng;
-use x25519_dalek::{StaticSecret, PublicKey as X25519PublicKey};
+use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SignedPreKey {
     id: String,
-    pub private: [u8; 32],
+    private: [u8; 32],
     pub public: [u8; 32],
     pub signature: Vec<u8>,
     pub created_at: DateTime<Utc>,
@@ -30,8 +30,8 @@ impl SignedPreKey {
         }
     }
 
-    pub fn public_key(&self) -> [u8; 32] {
-        self.public
+    pub(crate) fn private(&self) -> [u8; 32] {
+        self.private
     }
 }
 
