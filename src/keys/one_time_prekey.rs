@@ -22,7 +22,8 @@ impl OneTimePreKey {
         }
     }
 
-    pub(crate) fn private(&self) -> [u8; 32] {
+    #[warn(dead_code)]
+    pub(crate) fn get_private(&self) -> [u8; 32] {
         self.private
     }
 }
@@ -66,7 +67,7 @@ impl OneTimePreKeyGroup {
             .find(|k| k.public == pubkey)
             .cloned();
         if opk_used.is_some() {
-            Some(opk_used.unwrap().private)
+            Some(opk_used.unwrap().get_private())
         } else {
             None
         }

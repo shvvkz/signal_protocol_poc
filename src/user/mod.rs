@@ -78,7 +78,7 @@ impl User {
                 &to.ik,
                 opk.as_ref(),
             );
-            let rk = derive_root_key(&session.bytes);
+            let rk = derive_root_key(&session.get_bytes());
             let dhs = RatchetKey::new();
 
             RatchetState::new(rk, dhs, Some(to.spk.public), true)
@@ -110,12 +110,12 @@ impl User {
                 &from.ik,
                 ek,
             );
-            let rk = derive_root_key(&session.bytes);
+            let rk = derive_root_key(&session.get_bytes());
             // Accessing the private field directly is not possible if it's private.
             // You need to provide a public method in SignedPreKey to get the private key if needed.
             // For example, add this to SignedPreKey:
             // pub fn private_key(&self) -> [u8; 32] { self.private }
-            let dhs = RatchetKey::from_keys(self.spk.private(), self.spk.public);
+            let dhs = RatchetKey::from_keys(self.spk.get_private(), self.spk.public);
             RatchetState::new(rk, dhs, None, false)
         });
 

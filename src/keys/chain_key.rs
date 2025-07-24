@@ -4,19 +4,19 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainKey {
-    pub key: [u8; 32],
-    pub index: u32,
+pub(crate) struct ChainKey {
+    key: [u8; 32],
+    index: u32,
 }
 
 impl ChainKey {
-    pub fn derive_next(&self) -> (ChainKey, MessageKey) {
+    pub(crate) fn derive_next(&self) -> (ChainKey, MessageKey) {
         let mut hmac = Hmac::<Sha256>::new_from_slice(&self.key).unwrap();
 
         // 🔑 Derive message key with constant
         hmac.update(b"msg_key");
         let result = hmac.finalize().into_bytes();
-        let message_key = MessageKey { key: result.into(), index: self.index };
+        let message_key = MessageKey::new(result.into(), self.index);
 
         // 🔁 Derive next chain key
         let mut hmac_ck = Hmac::<Sha256>::new_from_slice(&self.key).unwrap();
@@ -29,6 +29,19 @@ impl ChainKey {
         };
 
         (next_chain_key, message_key)
+    }
+
+    pub(crate) fn new(key: [u8; 32], index: u32) -> Self {
+        Self { key, index }
+    }
+
+    #[warn(dead_code)]
+    pub(crate) fn get_key(&self) -> [u8; 32] {
+        self.key
+    }
+
+    pub(crate) fn get_index(&self) -> u32 {
+        self.index
     }
 }
 

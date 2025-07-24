@@ -16,7 +16,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RatchetState {
+pub(crate) struct RatchetState {
     root_key: RootKey,
     sending_chain: ChainKey,
     receiving_chain: ChainKey,
@@ -27,7 +27,7 @@ pub struct RatchetState {
 }
 
 impl RatchetState {
-    pub fn new(
+    pub(crate) fn new(
         root_key: RootKey,
         dhs: RatchetKey,
         dhr: Option<[u8; 32]>,
@@ -50,7 +50,7 @@ impl RatchetState {
         }
     }
 
-    pub fn encrypt(
+    pub(crate) fn encrypt(
         &mut self,
         plaintext: &str,
         sender: String,
@@ -67,32 +67,29 @@ impl RatchetState {
 
             self.dhs = RatchetKey::new();
 
-            let dh_output = diffie_hellman(&self.dhs.private(), self.dhr.as_ref().unwrap());
+            let dh_output = diffie_hellman(&self.dhs.get_private(), self.dhr.as_ref().unwrap());
 
-            let root_hkdf = Hkdf::<Sha256>::new(Some(&self.root_key.bytes), &dh_output);
+            let root_hkdf = Hkdf::<Sha256>::new(Some(self.root_key.get_bytes()), &dh_output);
 
             let mut rk = [0u8; 32];
             let mut ck_send = [0u8; 32];
             root_hkdf.expand(b"double-ratchet-rk", &mut rk).unwrap();
             root_hkdf.expand(b"ratchet-ck-send", &mut ck_send).unwrap();
 
-            self.root_key = RootKey { bytes: rk };
-            self.sending_chain = ChainKey {
-                key: ck_send,
-                index: 0,
-            };
+            self.root_key = RootKey::new(rk);
+            self.sending_chain = ChainKey::new(ck_send, 0);
         }
 
         let (next_ck, message_key) = self.sending_chain.derive_next();
         self.sending_chain = next_ck;
 
-        let (ciphertext, nonce) = encrypt_chacha20(&message_key.key, plaintext.as_bytes());
+        let (ciphertext, nonce) = encrypt_chacha20(&message_key.get_key(), plaintext.as_bytes());
 
         EncryptedMessage {
             sender,
             receiver,
             ratchet_pub: self.dhs.public,
-            message_index: message_key.index,
+            message_index: message_key.get_index(),
             nonce,
             ciphertext: ciphertext.to_vec(),
             opk_used,
@@ -100,12 +97,12 @@ impl RatchetState {
         }
     }
 
-    pub fn decrypt(&mut self, msg: &EncryptedMessage) -> Option<String> {
+    pub(crate) fn decrypt(&mut self, msg: &EncryptedMessage) -> Option<String> {
         let key_id = (msg.ratchet_pub.to_vec(), msg.message_index);
 
         // 1️⃣ Check for skipped messages
         if let Some(message_key) = self.skipped_message_keys.remove(&key_id) {
-            return decrypt_chacha20(&message_key.key, &msg.nonce, &msg.ciphertext)
+            return decrypt_chacha20(&message_key.get_key(), &msg.nonce, &msg.ciphertext)
                 .ok()
                 .and_then(|bytes| String::from_utf8(bytes).ok());
         }
@@ -116,26 +113,23 @@ impl RatchetState {
         if is_new_dhr {
             self.dhr = Some(msg.ratchet_pub);
 
-            let dh_output = diffie_hellman(&self.dhs.private(), &msg.ratchet_pub);
+            let dh_output = diffie_hellman(&self.dhs.get_private(), &msg.ratchet_pub);
 
-            let root_hkdf = Hkdf::<Sha256>::new(Some(&self.root_key.bytes), &dh_output);
+            let root_hkdf = Hkdf::<Sha256>::new(Some(self.root_key.get_bytes()), &dh_output);
 
             let mut rk = [0u8; 32];
             let mut ck_recv = [0u8; 32];
             root_hkdf.expand(b"double-ratchet-rk", &mut rk).unwrap();
             root_hkdf.expand(b"ratchet-ck-send", &mut ck_recv).unwrap();
 
-            self.root_key = RootKey { bytes: rk };
-            self.receiving_chain = ChainKey {
-                key: ck_recv,
-                index: 0,
-            };
+            self.root_key = RootKey::new(rk);
+            self.receiving_chain = ChainKey::new(ck_recv, 0);
         }
 
         // 3️⃣ Advance receiving chain to message index
-        while self.receiving_chain.index < msg.message_index {
+        while self.receiving_chain.get_index() < msg.message_index {
             let (next_ck, skipped_key) = self.receiving_chain.derive_next();
-            let key = (msg.ratchet_pub.to_vec(), self.receiving_chain.index);
+            let key = (msg.ratchet_pub.to_vec(), self.receiving_chain.get_index());
             self.skipped_message_keys.insert(key, skipped_key);
             self.receiving_chain = next_ck;
         }
@@ -144,7 +138,7 @@ impl RatchetState {
         let (next_ck, message_key) = self.receiving_chain.derive_next();
         self.receiving_chain = next_ck;
 
-        decrypt_chacha20(&message_key.key, &msg.nonce, &msg.ciphertext)
+        decrypt_chacha20(&message_key.get_key(), &msg.nonce, &msg.ciphertext)
             .ok()
             .and_then(|bytes| String::from_utf8(bytes).ok())
     }
@@ -159,7 +153,7 @@ impl Display for RatchetState {
             self.sending_chain,
             self.receiving_chain,
             hex::encode(self.dhs.public),
-            hex::encode(self.dhs.private()),
+            hex::encode(self.dhs.get_private()),
             match &self.dhr {
                 Some(dhr_bytes) => hex::encode(dhr_bytes),
                 None => String::from("None"),
@@ -175,7 +169,7 @@ impl Display for RatchetState {
                         "\n  pub: {}, idx: {}, key: {}",
                         hex::encode(ratchet_pub),
                         idx,
-                        hex::encode(&msg_key.key)
+                        hex::encode(&msg_key.get_key())
                     ));
                 }
                 skipped

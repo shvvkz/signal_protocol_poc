@@ -1,10 +1,20 @@
 use std::fmt::Display;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RootKey {
-    pub bytes: [u8; 32],
+pub(crate) struct RootKey {
+    bytes: [u8; 32],
+}
+
+impl RootKey {
+    pub(crate) fn new(bytes: [u8; 32]) -> Self {
+        Self { bytes }
+    }
+
+    pub(crate) fn get_bytes(&self) -> &[u8; 32] {
+        &self.bytes
+    }
 }
 
 impl Display for RootKey {

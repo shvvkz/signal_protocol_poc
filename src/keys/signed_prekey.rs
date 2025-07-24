@@ -15,7 +15,7 @@ pub struct SignedPreKey {
 }
 
 impl SignedPreKey {
-    pub fn new(identity_signing_key: &SigningKey) -> Self {
+    pub(crate) fn new(identity_signing_key: &SigningKey) -> Self {
         let private_key = StaticSecret::random_from_rng(&mut OsRng);
         let public_key = X25519PublicKey::from(&private_key);
 
@@ -30,7 +30,7 @@ impl SignedPreKey {
         }
     }
 
-    pub(crate) fn private(&self) -> [u8; 32] {
+    pub(crate) fn get_private(&self) -> [u8; 32] {
         self.private
     }
 }

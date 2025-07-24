@@ -31,7 +31,7 @@ impl IdentityKey {
         }
     }
 
-    pub(crate) fn private(&self) -> [u8; 32] {
+    pub(crate) fn get_private(&self) -> [u8; 32] {
         self.dh_private
     }
 

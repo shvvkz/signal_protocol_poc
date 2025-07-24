@@ -11,15 +11,15 @@ pub fn derive_session_key(dh_results: &[u8]) -> [u8; 32] {
     okm
 }
 
-pub fn derive_root_key(session_key: &[u8; 32]) -> RootKey {
+pub(crate) fn derive_root_key(session_key: &[u8; 32]) -> RootKey {
     let hk = Hkdf::<Sha256>::new(None, session_key);
     let mut rk = [0u8; 32];
     hk.expand(b"double-ratchet-root", &mut rk).expect("HKDF expand failed");
-    RootKey { bytes: rk }
+    RootKey::new(rk)
 }
 
-pub fn derive_initial_chain_keys(root_key: &RootKey) -> (ChainKey, ChainKey) {
-    let hk = Hkdf::<Sha256>::new(None, &root_key.bytes);
+pub(crate) fn derive_initial_chain_keys(root_key: &RootKey) -> (ChainKey, ChainKey) {
+    let hk = Hkdf::<Sha256>::new(None, root_key.get_bytes());
 
     let mut cks_bytes = [0u8; 32];
     let mut ckr_bytes = [0u8; 32];
@@ -28,7 +28,7 @@ pub fn derive_initial_chain_keys(root_key: &RootKey) -> (ChainKey, ChainKey) {
     hk.expand(b"ratchet-ck-recv", &mut ckr_bytes).unwrap();
 
     (
-        ChainKey { key: cks_bytes, index: 0 },
-        ChainKey { key: ckr_bytes, index: 0 },
+        ChainKey::new(cks_bytes, 0),
+        ChainKey::new(ckr_bytes, 0),
     )
 }
