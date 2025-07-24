@@ -38,15 +38,15 @@ pub fn receive_session_key(
     sender_name: String,
     receiver_ik: &IdentityKey,
     receiver_spk: &SignedPreKey,
-    receiver_opk: &OneTimePreKey,
+    receiver_opk_private: [u8; 32],
     sender_ik: &IdentityKey,
-    sender_ek: &EphemeralKey,
+    sender_ek_public: [u8; 32],
 ) -> SessionKey {
     // Même ordre que Alice : DH1, DH2, DH3, DH4
     let dh1 = diffie_hellman(&receiver_spk.private, &sender_ik.dh_public);
-    let dh2 = diffie_hellman(&receiver_ik.dh_private, &sender_ek.public);
-    let dh3 = diffie_hellman(&receiver_spk.private, &sender_ek.public);
-    let dh4 = diffie_hellman(&receiver_opk.private, &sender_ek.public);
+    let dh2 = diffie_hellman(&receiver_ik.dh_private, &sender_ek_public);
+    let dh3 = diffie_hellman(&receiver_spk.private, &sender_ek_public);
+    let dh4 = diffie_hellman(&receiver_opk_private, &sender_ek_public);
 
     let ikm = [dh1, dh2, dh3, dh4].concat();
     let sk_bytes = derive_session_key(&ikm);

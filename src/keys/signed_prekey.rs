@@ -7,7 +7,7 @@ use x25519_dalek::{StaticSecret, PublicKey as X25519PublicKey};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SignedPreKey {
-    pub id: String,
+    id: String,
     pub private: [u8; 32],
     pub public: [u8; 32],
     pub signature: Vec<u8>,
@@ -28,6 +28,10 @@ impl SignedPreKey {
             signature: signature.to_vec(),
             created_at: Utc::now(),
         }
+    }
+
+    pub fn public_key(&self) -> [u8; 32] {
+        self.public
     }
 }
 

@@ -1,8 +1,22 @@
+pub mod public_info;
+
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-use serde::{Serialize, Deserialize};
+use crate::keys::{
+    encrypted_message::EncryptedMessage, identity::IdentityKey,
+    one_time_prekey::OneTimePreKeyGroup, ratchet_key::RatchetKey, signed_prekey::SignedPreKey,
+};
 
-use crate::keys::{identity::IdentityKey, one_time_prekey::OneTimePreKeyGroup, signed_prekey::SignedPreKey};
+use std::collections::HashMap;
+
+use crate::{
+    crypto_utils::hkdf::derive_root_key,
+    double_ratchet::state::RatchetState,
+    keys::ephemeral_key::EphemeralKey,
+    user::public_info::UserPublicInfo,
+    x3dh::session::{create_session_key, receive_session_key},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
@@ -11,23 +25,100 @@ pub struct User {
     pub ik: IdentityKey,
     pub spk: SignedPreKey,
     pub opk: OneTimePreKeyGroup,
+    sessions: HashMap<String, RatchetState>,
 }
 
 impl User {
-    pub fn new(name: String)
-        -> Self {
+    pub fn new(name: String) -> Self {
         let id = uuid::Uuid::new_v4().to_string();
         let ik = IdentityKey::new();
         let spk = SignedPreKey::new(&ik.signing_key());
         let opk = OneTimePreKeyGroup::new(100);
 
-        User {
+        Self {
             id,
             name,
             ik,
             spk,
             opk,
+            sessions: HashMap::new(),
         }
+    }
+
+    pub fn public_info(&self) -> UserPublicInfo {
+        UserPublicInfo {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            ik: self.ik.public_key(),
+            spk: self.spk.public_key(),
+        }
+    }
+
+    pub fn send_message(&mut self, to: &mut User, plaintext: &str) -> EncryptedMessage {
+        let receiver_id = to.id.clone();
+
+        // We'll store the OPK used (if any) here
+        let mut used_opk: Option<[u8; 32]> = None;
+        let mut used_ek: Option<[u8; 32]> = None;
+
+        let ratchet = self.sessions.entry(receiver_id.clone()).or_insert_with(|| {
+            let ek = EphemeralKey::new();
+            // Try to use an OPK from the recipient
+            let opk = to.opk.use_key();
+            if let Some(ref opk_val) = opk {
+                used_opk = Some(opk_val.public);
+            }
+            used_ek = Some(ek.public);
+            let session = create_session_key(
+                self.name.clone(),
+                to.name.clone(),
+                &self.ik,
+                &ek,
+                &to.spk,
+                &to.ik,
+                opk.as_ref(),
+            );
+            let rk = derive_root_key(&session.bytes);
+            let dhs = RatchetKey::new();
+
+            RatchetState::new(rk, dhs, Some(to.spk.public_key()), true)
+        });
+        ratchet.encrypt(
+            plaintext,
+            self.name.clone(),
+            to.name.clone(),
+            used_opk,
+            used_ek,
+        )
+    }
+
+    pub fn receive_message(&mut self, from: &User, msg: &EncryptedMessage) -> Option<String> {
+        let sender_id = from.id.clone();
+
+        let ratchet = self.sessions.entry(sender_id.clone()).or_insert_with(|| {
+            let opk_private = msg.opk_used.and_then(|opk| {
+                self.opk.get_private_by_public_key(opk)
+            });
+            let opk_private = opk_private.unwrap_or([0u8; 32]);
+            let ek = msg.ek_used.unwrap_or([0u8; 32]);
+            let session = receive_session_key(
+                self.name.clone(),
+                from.name.clone(),
+                &self.ik,
+                &self.spk,
+                opk_private,
+                &from.ik,
+                ek,
+            );
+            let rk = derive_root_key(&session.bytes);
+            let dhs = RatchetKey {
+                private: self.spk.private,
+                public: self.spk.public_key(),
+            };
+            RatchetState::new(rk, dhs, None, false)
+        });
+
+        ratchet.decrypt(msg)
     }
 }
 
@@ -35,12 +126,8 @@ impl Display for User {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "id: {}\nname: {},\nik: {},\nspk: {},\nopk_count: {}",
-            self.id,
-            self.name,
-            self.ik,
-            self.spk,
-            self.opk
+            "id: {}\nname: {},\nik: {},\nspk: {},\nopk_count: {}\nsessions: {:?}\n",
+            self.id, self.name, self.ik, self.spk, self.opk, self.sessions
         )
     }
 }

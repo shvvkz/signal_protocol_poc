@@ -33,6 +33,10 @@ impl IdentityKey {
         }
     }
 
+    pub fn public_key(&self) -> [u8; 32] {
+        self.dh_public
+    }
+
     pub fn signing_key(&self) -> SigningKey {
         SigningKey::from_bytes(&self.sign_private)
     }

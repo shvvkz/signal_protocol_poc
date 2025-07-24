@@ -10,6 +10,8 @@ pub struct EncryptedMessage {
     pub ciphertext: Vec<u8>,
     pub ratchet_pub: [u8; 32], // DH public key utilisée
     pub message_index: u32,    // Index du message dans la chaîne (CKs.index)
+    pub opk_used: Option<[u8; 32]>,
+    pub ek_used: Option<[u8; 32]>, // Public key of the ephemeral key used
 }
 
 impl Display for EncryptedMessage {

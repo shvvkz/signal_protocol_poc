@@ -46,13 +46,28 @@ impl OneTimePreKeyGroup {
 
     pub fn use_key(&mut self) -> Option<OneTimePreKey> {
         if !self.keys.is_empty() {
-            let used_key = self.keys.remove(0);
-            self.keys.push(OneTimePreKey::new());
+            // let used_key = self.keys.remove(0);
+            println!("Delete the first key from the group in database");
+            let used_key = self.keys[0].clone();
+            // self.keys.push(OneTimePreKey::new());
             Some(used_key)
         } else {
             None
         }
     }
+
+    pub fn get_private_by_public_key(&self, pubkey: [u8; 32]) -> Option<[u8; 32]> {
+        let opk_used = self.keys
+            .iter()
+            .find(|k| k.public == pubkey)
+            .cloned();
+        if opk_used.is_some() {
+            Some(opk_used.unwrap().private)
+        } else {
+            None
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.keys.len()
     }
