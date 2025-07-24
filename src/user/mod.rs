@@ -22,9 +22,9 @@ use crate::{
 pub struct User {
     pub id: String,
     pub name: String,
-    pub ik: IdentityKey,
-    pub spk: SignedPreKey,
-    pub opk: OneTimePreKeyGroup,
+    ik: IdentityKey,
+    spk: SignedPreKey,
+    opk: OneTimePreKeyGroup,
     sessions: HashMap<String, RatchetState>,
 }
 
@@ -51,10 +51,11 @@ impl User {
             name: self.name.clone(),
             ik: self.ik.dh_public,
             spk: self.spk.public,
+            opk: self.opk.public_group(),
         }
     }
 
-    pub fn send_message(&mut self, to: &mut User, plaintext: &str) -> EncryptedMessage {
+    pub fn send_message(&mut self, to: &mut UserPublicInfo, plaintext: &str) -> EncryptedMessage {
         let receiver_id = to.id.clone();
 
         // We'll store the OPK used (if any) here
@@ -74,14 +75,14 @@ impl User {
                 to.name.clone(),
                 &self.ik,
                 &ek,
-                &to.spk,
-                &to.ik,
+                to.spk,
+                to.ik,
                 opk.as_ref(),
             );
             let rk = derive_root_key(&session.get_bytes());
             let dhs = RatchetKey::new();
 
-            RatchetState::new(rk, dhs, Some(to.spk.public), true)
+            RatchetState::new(rk, dhs, Some(to.spk), true)
         });
         ratchet.encrypt(
             plaintext,
@@ -96,9 +97,9 @@ impl User {
         let sender_id = from.id.clone();
 
         let ratchet = self.sessions.entry(sender_id.clone()).or_insert_with(|| {
-            let opk_private = msg.opk_used.and_then(|opk| {
-                self.opk.get_private_by_public_key(opk)
-            });
+            let opk_private = msg
+                .opk_used
+                .and_then(|opk| self.opk.get_private_by_public_key(opk));
             let opk_private = opk_private.unwrap_or([0u8; 32]);
             let ek = msg.ek_used.unwrap_or([0u8; 32]);
             let session = receive_session_key(
@@ -133,7 +134,8 @@ impl Display for User {
             self.ik,
             self.spk,
             self.opk.len(),
-            self.sessions.iter()
+            self.sessions
+                .iter()
                 .map(|(k, v)| format!("{}: {}", k, v))
                 .collect::<Vec<_>>()
                 .join("\n")

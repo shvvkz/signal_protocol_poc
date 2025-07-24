@@ -10,9 +10,9 @@ fn main() {
     println!("Bob: {}\n", bob);
     println!("Charlie: {}\n", charlie);
 
-    let msg1 = alice.send_message(&mut bob, "Salut Bob !");
-    let msg1_1 = charlie.send_message(&mut alice, "Salut Alice, c'est Charlie !");
-    let msg1_2 = bob.send_message(&mut charlie, "Yo Charlie, ça dit quoi?");
+    let msg1 = alice.send_message(&mut bob.public_info(), "Salut Bob !");
+    let msg1_1 = charlie.send_message(&mut alice.public_info(), "Salut Alice, c'est Charlie !");
+    let msg1_2 = bob.send_message(&mut charlie.public_info(), "Yo Charlie, ça dit quoi?");
     if let Some(plain1_2) = charlie.receive_message(&bob, &msg1_2) {
         println!("Bob -> Charlie: {}", plain1_2);
     }
@@ -23,8 +23,8 @@ fn main() {
         println!("Alice -> Bob: {}", plain1);
     }
 
-    let msg2 = bob.send_message(&mut alice, "Salut Alice, bien reçu !");
-    let msg2_2 = alice.send_message(&mut charlie, "Salut Charlie, quoi de neuf ?");
+    let msg2 = bob.send_message(&mut alice.public_info(), "Salut Alice, bien reçu !");
+    let msg2_2 = alice.send_message(&mut charlie.public_info(), "Salut Charlie, quoi de neuf ?");
     if let Some(plain2_2) = charlie.receive_message(&alice, &msg2_2) {
         println!("Alice -> Charlie: {}", plain2_2);
     }
@@ -33,10 +33,10 @@ fn main() {
     }
 
     // 💬 Bob envoie 2 messages désynchronisés
-    let msg3 = bob.send_message(&mut alice, "Voici un autre message.");
-    let msg3_3 = charlie.send_message(&mut alice, "Pas grand chose!");
-    let msg4 = bob.send_message(&mut alice, "Et un dernier pour la route !");
-    let msg4_4 = charlie.send_message(&mut alice, "Et toi?");
+    let msg3 = bob.send_message(&mut alice.public_info(), "Voici un autre message.");
+    let msg3_3 = charlie.send_message(&mut alice.public_info(), "Pas grand chose!");
+    let msg4 = bob.send_message(&mut alice.public_info(), "Et un dernier pour la route !");
+    let msg4_4 = charlie.send_message(&mut alice.public_info(), "Et toi?");
 
     // 📥 Alice reçoit d'abord le message 4, puis le 3
     if let Some(plain4) = alice.receive_message(&bob, &msg4) {

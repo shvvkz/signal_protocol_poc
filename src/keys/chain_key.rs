@@ -1,5 +1,5 @@
 use crate::keys::message_key::MessageKey;
-use hkdf::{hmac::{Hmac, Mac}};
+use hkdf::hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
@@ -35,13 +35,7 @@ impl ChainKey {
         Self { key, index }
     }
 
-    #[warn(dead_code)]
-    pub(crate) fn get_key(&self) -> [u8; 32] {
-        self.key
-    }
-
     pub(crate) fn get_index(&self) -> u32 {
         self.index
     }
 }
-

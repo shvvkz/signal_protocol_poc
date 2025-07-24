@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
-use serde::{Serialize, Deserialize};
 use rand_core::OsRng;
-use x25519_dalek::{StaticSecret, PublicKey as X25519PublicKey};
+use serde::{Deserialize, Serialize};
+use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OneTimePreKey {
@@ -21,16 +21,16 @@ impl OneTimePreKey {
             public: *public_key.as_bytes(),
         }
     }
-
-    #[warn(dead_code)]
-    pub(crate) fn get_private(&self) -> [u8; 32] {
-        self.private
-    }
 }
 
 impl Display for OneTimePreKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "public: {}, private: {}", hex::encode(self.public), hex::encode(self.private))
+        write!(
+            f,
+            "public: {}, private: {}",
+            hex::encode(self.public),
+            hex::encode(self.private)
+        )
     }
 }
 
@@ -40,16 +40,16 @@ pub struct OneTimePreKeyGroup {
 }
 
 impl OneTimePreKeyGroup {
-    pub fn new(size: usize) -> Self {
+    pub(crate) fn new(size: usize) -> Self {
         let keys = (0..size).map(|_| OneTimePreKey::new()).collect();
         Self { keys }
     }
 
-    pub fn get_keys(&self) -> &Vec<OneTimePreKey> {
+    pub(crate) fn get_keys(&self) -> &Vec<OneTimePreKey> {
         &self.keys
     }
 
-    pub fn use_key(&mut self) -> Option<OneTimePreKey> {
+    pub(crate) fn use_key(&mut self) -> Option<OneTimePreKey> {
         if !self.keys.is_empty() {
             // let used_key = self.keys.remove(0);
             println!("Delete the first key from the group in database");
@@ -61,20 +61,30 @@ impl OneTimePreKeyGroup {
         }
     }
 
-    pub fn get_private_by_public_key(&self, pubkey: [u8; 32]) -> Option<[u8; 32]> {
-        let opk_used = self.keys
-            .iter()
-            .find(|k| k.public == pubkey)
-            .cloned();
+    pub(crate) fn get_private_by_public_key(&self, pubkey: [u8; 32]) -> Option<[u8; 32]> {
+        let opk_used = self.keys.iter().find(|k| k.public == pubkey).cloned();
         if opk_used.is_some() {
-            Some(opk_used.unwrap().get_private())
+            Some(opk_used.unwrap().private)
         } else {
             None
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.keys.len()
+    }
+
+    pub(crate) fn public_group(&self) -> OneTimePreKeyGroupPublic {
+        OneTimePreKeyGroupPublic {
+            keys: self
+                .keys
+                .iter()
+                .map(|k| OneTimePreKeyPublic {
+                    id: k.id.clone(),
+                    public: k.public,
+                })
+                .collect(),
+        }
     }
 }
 
@@ -85,5 +95,31 @@ impl Display for OneTimePreKeyGroup {
             writeln!(f, "Key {}: {}", i, key)?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OneTimePreKeyPublic {
+    pub id: String,
+    pub public: [u8; 32],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OneTimePreKeyGroupPublic {
+    pub keys: Vec<OneTimePreKeyPublic>,
+}
+
+impl OneTimePreKeyGroupPublic {
+    pub fn use_key(&mut self) -> Option<OneTimePreKeyPublic> {
+        if !self.keys.is_empty() {
+            // let used_key = self.keys.remove(0);
+            println!("Delete the first key from the group in database");
+            // this will ask the api to get a key from the row of the User and delete the first key he founds and return it
+            let used_key = self.keys[0].clone();
+            // self.keys.push(OneTimePreKey::new());
+            Some(used_key)
+        } else {
+            None
+        }
     }
 }

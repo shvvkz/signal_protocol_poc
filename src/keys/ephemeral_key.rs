@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
-use serde::{Serialize, Deserialize};
 use rand_core::OsRng;
-use x25519_dalek::{StaticSecret, PublicKey as X25519PublicKey};
+use serde::{Deserialize, Serialize};
+use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EphemeralKey {
@@ -28,7 +28,11 @@ impl EphemeralKey {
 
 impl Display for EphemeralKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "public: {}, private: {}", hex::encode(self.public), hex::encode(self.private))
+        write!(
+            f,
+            "public: {}, private: {}",
+            hex::encode(self.public),
+            hex::encode(self.private)
+        )
     }
 }
-
