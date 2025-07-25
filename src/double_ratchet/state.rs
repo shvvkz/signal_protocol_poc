@@ -15,6 +15,11 @@ use crate::{
     },
 };
 
+/// Maintains the sender/receiver cryptographic state in a Double Ratchet session.
+///
+/// `RatchetState` manages key evolution and encryption/decryption operations between
+/// two parties. It tracks chain keys, DH keys, and message indexes while implementing
+/// skipped message handling for out-of-order delivery.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct RatchetState {
     root_key: RootKey,
@@ -27,6 +32,13 @@ pub(crate) struct RatchetState {
 }
 
 impl RatchetState {
+    /// Initializes a new `RatchetState` with a given root key and DH key material.
+    ///
+    /// # Arguments
+    /// - `root_key`: Initial shared root key
+    /// - `dhs`: Our current DH private/public key pair
+    /// - `dhr`: Their current public key (if known)
+    /// - `is_initiator`: Whether we are the session initiator (affects chain ordering)
     pub(crate) fn new(
         root_key: RootKey,
         dhs: RatchetKey,
@@ -50,6 +62,19 @@ impl RatchetState {
         }
     }
 
+    /// Encrypts a plaintext message using the next derived message key.
+    ///
+    /// Performs a DH ratchet step if `dhr` has changed since the last message.
+    ///
+    /// # Arguments
+    /// - `plaintext`: Message to encrypt
+    /// - `sender`: Sender name/ID
+    /// - `receiver`: Receiver name/ID
+    /// - `opk_used`: One-time prekey (if used during X3DH)
+    /// - `ek_used`: Ephemeral key used in the session
+    ///
+    /// # Returns
+    /// An `EncryptedMessage` containing ciphertext and metadata.
     pub(crate) fn encrypt(
         &mut self,
         plaintext: &str,
@@ -97,17 +122,22 @@ impl RatchetState {
         }
     }
 
+    /// Attempts to decrypt a received `EncryptedMessage`.
+    ///
+    /// Handles DH ratcheting, skipped message key recovery, and message key derivation.
+    ///
+    /// # Returns
+    /// - `Some(plaintext)` if decryption succeeds
+    /// - `None` if decryption fails or the message is malformed
     pub(crate) fn decrypt(&mut self, msg: &EncryptedMessage) -> Option<String> {
         let key_id = (msg.ratchet_pub.to_vec(), msg.message_index);
 
-        // 1️⃣ Check for skipped messages
         if let Some(message_key) = self.skipped_message_keys.remove(&key_id) {
             return decrypt_chacha20(&message_key.get_key(), &msg.nonce, &msg.ciphertext)
                 .ok()
                 .and_then(|bytes| String::from_utf8(bytes).ok());
         }
 
-        // 2️⃣ DH ratchet if needed
         let is_new_dhr = self.dhr.map_or(true, |prev| prev != msg.ratchet_pub);
 
         if is_new_dhr {
@@ -126,7 +156,6 @@ impl RatchetState {
             self.receiving_chain = ChainKey::new(ck_recv, 0);
         }
 
-        // 3️⃣ Advance receiving chain to message index
         while self.receiving_chain.get_index() < msg.message_index {
             let (next_ck, skipped_key) = self.receiving_chain.derive_next();
             let key = (msg.ratchet_pub.to_vec(), self.receiving_chain.get_index());
@@ -134,7 +163,6 @@ impl RatchetState {
             self.receiving_chain = next_ck;
         }
 
-        // 4️⃣ Decrypt the message
         let (next_ck, message_key) = self.receiving_chain.derive_next();
         self.receiving_chain = next_ck;
 
@@ -145,6 +173,8 @@ impl RatchetState {
 }
 
 impl Display for RatchetState {
+    /// Provides a human-readable summary of the ratchet state,
+    /// including root key, chains, and skipped keys.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
