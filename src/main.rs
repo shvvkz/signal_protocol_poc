@@ -1,69 +1,47 @@
-use signal_protocol_poc::{
-    crypto_utils::hkdf::{derive_root_key},
-    double_ratchet::state::RatchetState,
-    keys::{ephemeral_key::EphemeralKey, ratchet_key::RatchetKey},
-    user::User,
-    x3dh::session::{create_session_key, receive_session_key},
-};
+use signal_protocol_poc::user::User;
 
 fn main() {
-    // 1️⃣ Création des utilisateurs
-    let alice = User::new("Alice".to_string());
+    let mut alice = User::new("Alice".to_string());
     let mut bob = User::new("Bob".to_string());
+    let mut charlie = User::new("Charlie".to_string());
 
-    println!("🔐 Utilisateurs créés.\nAlice:\n{}\n\nBob:\n{}\n", alice, bob);
+    let msg1 = alice.send_message(&bob.public_info(), "Salut Bob !");
+    let msg1_1 = charlie.send_message(&alice.public_info(), "Salut Alice, c'est Charlie !");
+    let msg1_2 = bob.send_message(&charlie.public_info(), "Yo Charlie, ça dit quoi?");
+    if let Some(plain1_2) = charlie.receive_message(&bob.public_info(), &msg1_2) {
+        println!("Bob -> Charlie: {}", plain1_2);
+    }
+    if let Some(plain1_1) = alice.receive_message(&charlie.public_info(), &msg1_1) {
+        println!("Charlie -> Alice: {}", plain1_1);
+    }
+    if let Some(plain1) = bob.receive_message(&alice.public_info(), &msg1) {
+        println!("Alice -> Bob: {}", plain1);
+    }
 
-    // 2️⃣ Alice génère EK + crée la session
-    let ek_alice = EphemeralKey::new();
-    let opk_bob = bob.opk.use_key().unwrap();
-    let session_alice = create_session_key(
-        alice.name.clone(),
-        bob.name.clone(),
-        &alice.ik,
-        &ek_alice,
-        &bob.spk,
-        &bob.ik,
-        Some(&opk_bob),
-    );
+    let msg2 = bob.send_message(&alice.public_info(), "Salut Alice, bien reçu !");
+    let msg2_2 = alice.send_message(&charlie.public_info(), "Salut Charlie, quoi de neuf ?");
+    if let Some(plain2_2) = charlie.receive_message(&alice.public_info(), &msg2_2) {
+        println!("Alice -> Charlie: {}", plain2_2);
+    }
+    if let Some(plain2) = alice.receive_message(&bob.public_info(), &msg2) {
+        println!("Bob -> Alice: {}", plain2);
+    }
 
-    // 3️⃣ Bob reçoit la session (sans interaction réseau dans ce PoC)
-    let session_bob = receive_session_key(
-        bob.name.clone(),
-        alice.name.clone(),
-        &bob.ik,
-        &bob.spk,
-        &opk_bob,
-        &alice.ik,
-        &ek_alice,
-    );
+    let msg3 = bob.send_message(&alice.public_info(), "Voici un autre message.");
+    let msg3_3 = charlie.send_message(&alice.public_info(), "Pas grand chose!");
+    let msg4 = bob.send_message(&alice.public_info(), "Et un dernier pour la route !");
+    let msg4_4 = charlie.send_message(&alice.public_info(), "Et toi?");
 
-    // 4️⃣ Les deux côtés dérivent leur root key
-    let root_key_alice = derive_root_key(&session_alice.bytes);
-    let root_key_bob = derive_root_key(&session_bob.bytes);
-    println!("Root key: alice::{} = bob::{} ", root_key_alice, root_key_bob);
-
-    // 5️⃣ Initialisation Double Ratchet
-    let mut ratchet_alice = RatchetState::new(root_key_alice, RatchetKey::new(), bob.spk.public, true);
-    let mut ratchet_bob = RatchetState::new(root_key_bob, RatchetKey::new(), alice.spk.public, false);
-
-    println!("🔄 Double Ratchet initialisé.\n");
-
-    // 💬 1er message : Alice → Bob
-    let alice_pub = ratchet_alice.dhs.public;
-    let msg1 = ratchet_alice.encrypt("Salut Bob, c’est Alice !", &alice_pub, "Alice".into(), "Bob".into());
-    println!("📤 Alice envoie");
-    let clear1 = ratchet_bob.decrypt(&msg1, &msg1.ratchet_pub);
-    println!("📥 Bob reçoit : {:?}", clear1);
-
-    // 💬 2e message : Bob → Alice
-    let bob_pub = ratchet_bob.dhs.public;
-    let msg2 = ratchet_bob.encrypt("Salut Alice, bien reçu !", &bob_pub, "Bob".into(), "Alice".into());
-    let clear2 = ratchet_alice.decrypt(&msg2, &msg2.ratchet_pub);
-    println!("📥 Alice reçoit : {:?}", clear2);
-
-    // 💬 3e message : Alice → Bob (nouvelle rotation DH)
-    let alice_pub_2 = ratchet_alice.dhs.public;
-    let msg3 = ratchet_alice.encrypt("On peut maintenant discuter en toute sécurité 🔐", &alice_pub_2, "Alice".into(), "Bob".into());
-    let clear3 = ratchet_bob.decrypt(&msg3, &msg3.ratchet_pub);
-    println!("📥 Bob reçoit : {:?}", clear3);
+    if let Some(plain4) = alice.receive_message(&bob.public_info(), &msg4) {
+        println!("Bob -> Alice: {}", plain4);
+    }
+    if let Some(plain4_4) = alice.receive_message(&charlie.public_info(), &msg4_4) {
+        println!("Charlie -> Alice: {}", plain4_4);
+    }
+    if let Some(plain3) = alice.receive_message(&bob.public_info(), &msg3) {
+        println!("Bob -> Alice: {}", plain3);
+    }
+    if let Some(plain3_3) = alice.receive_message(&charlie.public_info(), &msg3_3) {
+        println!("Charlie -> Alice: {}", plain3_3);
+    }
 }

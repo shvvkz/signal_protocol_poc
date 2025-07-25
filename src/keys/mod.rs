@@ -1,10 +1,10 @@
+pub mod chain_key;
+pub mod encrypted_message;
 pub mod ephemeral_key;
 pub mod identity;
+pub mod message_key;
 pub mod one_time_prekey;
+pub mod ratchet_key;
+pub mod root_key;
 pub mod session_key;
 pub mod signed_prekey;
-pub mod root_key;
-pub mod chain_key;
-pub mod ratchet_key;
-pub mod message_key;
-pub mod encrypted_message;
